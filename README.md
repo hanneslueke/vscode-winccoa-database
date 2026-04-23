@@ -37,12 +37,21 @@ Automatically connects to WinCC OA projects via:
 2. `winccoa-project-admin` extension API
 3. Workspace folder detection
 
+### Drag & Drop DP Names
+
+Effortlessly copy datapoint names for use in scripts, documentation, or AI assistants:
+
+- **Drag & drop** datapoint or element nodes from the tree view into any VS Code editor or external application
+- **Context menu**: Right-click on DP or element nodes and select "Copy DP Name"
+- Automatically constructs the full element path (e.g., `System1:ExampleDP.config.address`)
+- Works seamlessly with Copilot Chat, terminals, and external tools
+
 ## Architecture
 
 ```text
 VS Code Extension
   |
-  |-- sql.js (read-only) -------> ident.sqlite    (DPTs, elements, DPs)
+  |-- better-sqlite3 (read) ----> ident.sqlite    (DPTs, elements, DPs)
   |                                config.sqlite   (address, alert, archive, ...)
   |                                last_value.sqlite (current values)
   |
@@ -50,7 +59,7 @@ VS Code Extension
                                   (localhost:3001)
 ```
 
-- **Reading**: All data is read from SQLite databases at `{projectDir}/db/wincc_oa/sqlite/` using sql.js (WebAssembly-based SQLite, cross-platform)
+- **Reading**: All data is read from SQLite databases at `{projectDir}/db/wincc_oa/sqlite/` using better-sqlite3 (native Node.js module, prebuilt for Electron and Node.js runtimes)
 - **Writing**: Values are set through the WinCC OA MCP HTTP server, which routes them through the event manager
 
 > **Note**: Direct SQLite writes do not propagate to the WinCC OA runtime. Use the MCP server for value changes.
@@ -78,7 +87,7 @@ VS Code Extension
 code --install-extension vscode-winccoa-database-X.Y.Z.vsix
 ```
 
-The extension works cross-platform on Windows, Linux, and macOS without requiring additional setup.
+The extension works cross-platform on Windows, Linux, and macOS. Native modules are prebuilt for Electron (local VS Code) and Node.js (Remote SSH/Containers).
 
 ## Development
 

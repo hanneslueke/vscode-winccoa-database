@@ -90,6 +90,7 @@ export async function activate(context: vscode.ExtensionContext) {
         treeDataProvider: dptTreeProvider,
         showCollapseAll: true,
         canSelectMany: true,
+        dragAndDropController: dptTreeProvider,
     });
     context.subscriptions.push(dptTreeView);
     log.info('Tree views registered');
@@ -127,6 +128,22 @@ export async function activate(context: vscode.ExtensionContext) {
             );
             if (item && item.dpId !== undefined && item.elId !== undefined) {
                 openConfigEditor(item.dpId, item.elId, item.label, context.extensionUri);
+            }
+        }),
+        vscode.commands.registerCommand('winccoa-database.copyDpName', async (item) => {
+            log.info(
+                `Command: copyDpName, item=${JSON.stringify(item?.label)}, itemType=${item?.itemType}`,
+            );
+            if (item && item.getFullDpName) {
+                const fullName = item.getFullDpName();
+                if (fullName) {
+                    await vscode.env.clipboard.writeText(fullName);
+                    vscode.window.showInformationMessage(`Copied: ${fullName}`);
+                    log.info(`Copied DP name to clipboard: ${fullName}`);
+                } else {
+                    vscode.window.showWarningMessage('Could not determine DP name');
+                    log.warn('copyDpName: getFullDpName() returned undefined');
+                }
             }
         }),
         vscode.commands.registerCommand('winccoa-database.createDp', async (item) => {

@@ -2,7 +2,7 @@
     "name": "vscode-winccoa-database",
     "displayName": "WinCC OA Database Explorer",
     "description": "Browse and edit WinCC OA datapoint types and datapoints directly from VS Code",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "publisher": "winccoa-tools-pack",
     "author": "winccoa-tools-pack",
     "license": "MIT",
@@ -73,6 +73,12 @@
                 "category": "WinCC OA Database"
             },
             {
+                "command": "winccoa-database.copyDpName",
+                "title": "Copy DP Name",
+                "icon": "$(copy)",
+                "category": "WinCC OA Database"
+            },
+            {
                 "command": "winccoa-database.createDp",
                 "title": "New Datapoint",
                 "icon": "$(add)",
@@ -136,6 +142,16 @@
                     "command": "winccoa-database.deleteDpType",
                     "when": "view == winccoa-database.dptView && viewItem == dpt",
                     "group": "2_delete"
+                },
+                {
+                    "command": "winccoa-database.copyDpName",
+                    "when": "view == winccoa-database.dptView && viewItem == dp",
+                    "group": "9_cutcopypaste@1"
+                },
+                {
+                    "command": "winccoa-database.copyDpName",
+                    "when": "view == winccoa-database.dptView && viewItem == dpElement",
+                    "group": "9_cutcopypaste@1"
                 }
             ],
             "commandPalette": [

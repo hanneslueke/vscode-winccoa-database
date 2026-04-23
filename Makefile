@@ -101,7 +101,8 @@ test: test-unit
 test-unit:
 	@$(NPM) run test:unit
 
-test-local:
+test-local: prebuild-electron
+	@echo "Testing with rebuilt native modules..."
 	@node scripts/test-local.js $(BIN_DIR) $(EXTENSION_NAME) $(VERSION) \
 		$(EXT_ID) $(CODE_BIN) $(TEST_WORKSPACE)
 

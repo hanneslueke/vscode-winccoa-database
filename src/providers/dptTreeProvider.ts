@@ -16,6 +16,7 @@ export class DatabaseTreeItem extends vscode.TreeItem {
         public readonly dpId: number = 0,
         public readonly elId: number = 0,
         public readonly datatype: number = 0,
+        public readonly db?: SqliteClient,
     ) {
         super(label, collapsibleState);
 
@@ -48,9 +49,39 @@ export class DatabaseTreeItem extends vscode.TreeItem {
                 break;
         }
     }
+
+    /**
+     * Get the full DP name for this tree item.
+     * - For DPT: returns the DPT name
+     * - For DP: returns the DP name (e.g., "System1:ExampleDP")
+     * - For dpElement: returns the full element path (e.g., "System1:ExampleDP.Value")
+     */
+    getFullDpName(): string | undefined {
+        switch (this.itemType) {
+            case 'dpt':
+                return this.label;
+            case 'dp':
+                return this.label;
+            case 'dpElement': {
+                if (!this.db) return undefined;
+                const dpName = this.db.getDatapointName(this.dpId);
+                if (!dpName) return undefined;
+                const elementPath = this.db.getElementPath(this.dpId, this.elId);
+                return elementPath ? `${dpName}.${elementPath}` : dpName;
+            }
+            default:
+                return undefined;
+        }
+    }
 }
 
-export class DptTreeProvider implements vscode.TreeDataProvider<DatabaseTreeItem> {
+export class DptTreeProvider
+    implements
+        vscode.TreeDataProvider<DatabaseTreeItem>,
+        vscode.TreeDragAndDropController<DatabaseTreeItem>
+{
+    dropMimeTypes = [];
+    dragMimeTypes = ['text/plain'];
     private _onDidChangeTreeData = new vscode.EventEmitter<DatabaseTreeItem | undefined | null>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
@@ -96,6 +127,27 @@ export class DptTreeProvider implements vscode.TreeDataProvider<DatabaseTreeItem
         }
     }
 
+    /**
+     * Handle drag operation - provide the full DP name as text/plain
+     */
+    handleDrag(source: DatabaseTreeItem[], dataTransfer: vscode.DataTransfer): void {
+        if (source.length === 0) return;
+
+        const item = source[0];
+        const fullName = item.getFullDpName();
+        if (fullName) {
+            dataTransfer.set('text/plain', new vscode.DataTransferItem(fullName));
+            log.info(`[Drag] Set text/plain = "${fullName}"`);
+        }
+    }
+
+    /**
+     * Handle drop operation - not needed for our use case, but required by interface
+     */
+    handleDrop(): void {
+        // Not implemented - we only support dragging out, not dropping in
+    }
+
     /** Root level: all DPTs */
     private getRootChildren(): DatabaseTreeItem[] {
         const dpTypes = this.db.getAllDpTypes();
@@ -112,6 +164,10 @@ export class DptTreeProvider implements vscode.TreeDataProvider<DatabaseTreeItem
                     vscode.TreeItemCollapsibleState.Collapsed,
                     'dpt',
                     dpt.dpt_id,
+                    0,
+                    0,
+                    0,
+                    this.db,
                 ),
         );
     }
@@ -132,6 +188,9 @@ export class DptTreeProvider implements vscode.TreeDataProvider<DatabaseTreeItem
                 'dp',
                 dp.dpt_id,
                 dp.dp_id,
+                0,
+                0,
+                this.db,
             );
         });
     }
@@ -188,6 +247,7 @@ export class DptTreeProvider implements vscode.TreeDataProvider<DatabaseTreeItem
                 dpId,
                 el.el_id,
                 el.datatype,
+                this.db,
             );
         });
     }
