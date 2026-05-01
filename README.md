@@ -113,7 +113,7 @@ Press **F5** in VS Code to launch the Extension Development Host.
 - **Lint**: `npm run lint`
 - **Format check**: `npm run format:check`
 - **Unit tests**: `npm run test:unit`
-- **Integration tests**: `npm run test:integrationt`
+- **Integration tests**: `npm run test:integration`
 
 ## Branching Model (GitFlow)
 
