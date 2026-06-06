@@ -18,6 +18,47 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+function getAbiForTarget(runtime, targetVersion) {
+    if (!targetVersion) {
+        throw new Error(`Missing target version for runtime "${runtime}"`);
+    }
+
+    try {
+        const nodeAbi = require('node-abi');
+        const abi = nodeAbi.getAbi(targetVersion, runtime);
+        if (abi) {
+            return String(abi);
+        }
+    } catch (_err) {
+        // Fallback mappings below keep the script usable when node-abi is unavailable.
+    }
+
+    const fallbackMap = {
+        node: { 18: '108', 20: '115', 22: '127', 23: '131', 24: '137' },
+        electron: {
+            32: '128',
+            33: '130',
+            34: '132',
+            35: '133',
+            36: '135',
+            37: '136',
+            38: '139',
+            39: '140',
+        },
+    };
+
+    const major = parseInt(String(targetVersion).split('.')[0], 10);
+    const abi = fallbackMap[runtime]?.[major];
+    if (abi) {
+        return abi;
+    }
+
+    throw new Error(
+        `Could not resolve ABI for runtime "${runtime}" and target "${targetVersion}". ` +
+            `Install node-abi or extend fallback mappings.`,
+    );
+}
+
 const ROOT = path.join(__dirname, '..');
 const SOURCE = path.join(
     ROOT,
@@ -61,18 +102,6 @@ if (
 
 fs.mkdirSync(PREBUILDS_DIR, { recursive: true });
 
-// Electron major -> ABI mapping (update when targeting new Electron versions)
-const ELECTRON_ABI_MAP = {
-    32: '128',
-    33: '130',
-    34: '132',
-    35: '133',
-    36: '135',
-    37: '136',
-    38: '139',
-    39: '140',
-};
-
 // ── Download prebuilds from GitHub releases ────────────────────────
 if (mode === '--download-node') {
     const versions = args.slice(1);
@@ -81,14 +110,12 @@ if (mode === '--download-node') {
         process.exit(1);
     }
 
-    // Node major -> ABI mapping
-    const nodeAbiMap = { 18: '108', 20: '115', 22: '127', 23: '131', 24: '137' };
-
     for (const ver of versions) {
-        const major = parseInt(ver.split('.')[0], 10);
-        const abi = nodeAbiMap[major];
-        if (!abi) {
-            console.error(`Unknown Node major version: ${major}`);
+        let abi;
+        try {
+            abi = getAbiForTarget('node', ver);
+        } catch (err) {
+            console.error(err.message);
             process.exit(1);
         }
 
@@ -139,11 +166,11 @@ if (mode === '--download-electron') {
         console.error('Provide Electron target version (e.g. 39.3.0)');
         process.exit(1);
     }
-    const electronMajor = parseInt(electronVersion.split('.')[0], 10);
-
-    const targetAbi = ELECTRON_ABI_MAP[electronMajor];
-    if (!targetAbi) {
-        console.error(`Unknown Electron major version: ${electronMajor}`);
+    let targetAbi;
+    try {
+        targetAbi = getAbiForTarget('electron', electronVersion);
+    } catch (err) {
+        console.error(err.message);
         process.exit(1);
     }
 
@@ -214,12 +241,14 @@ if (mode === '--download-abi') {
     const targetAbi = args[1];
     const runtimeIdx = args.indexOf('--runtime');
     const targetIdx = args.indexOf('--target');
-    
+
     if (!targetAbi || runtimeIdx === -1 || targetIdx === -1) {
         console.error(
             'Usage: node scripts/collect-prebuilds.js --download-abi <abi> --runtime <runtime> --target <version>',
         );
-        console.error('Example: node scripts/collect-prebuilds.js --download-abi 139 --runtime electron --target 38.0.0');
+        console.error(
+            'Example: node scripts/collect-prebuilds.js --download-abi 139 --runtime electron --target 38.0.0',
+        );
         process.exit(1);
     }
 
@@ -228,7 +257,7 @@ if (mode === '--download-abi') {
 
     console.log(`Downloading prebuild for ${runtime} ${target} (ABI ${targetAbi})...`);
     const cwd = path.join(ROOT, 'node_modules', 'better-sqlite3');
-    
+
     try {
         execFileSync(
             process.execPath,
@@ -280,7 +309,8 @@ const abi = process.versions.modules;
 
 let targetAbi;
 if (mode === '--node') {
-    targetAbi = abi;
+    const targetIdx = args.indexOf('--target');
+    targetAbi = targetIdx !== -1 && args[targetIdx + 1] ? args[targetIdx + 1] : abi;
     console.log(`Collecting Node.js prebuild (ABI ${targetAbi})`);
 } else {
     // Read the Electron version from package.json rebuild script
@@ -292,11 +322,10 @@ if (mode === '--node') {
         process.exit(1);
     }
     const electronVersion = electronVersionMatch[1];
-    const electronMajor = parseInt(electronVersion.split('.')[0], 10);
-
-    targetAbi = ELECTRON_ABI_MAP[electronMajor];
-    if (!targetAbi) {
-        console.error(`Unknown Electron major version: ${electronMajor}`);
+    try {
+        targetAbi = getAbiForTarget('electron', electronVersion);
+    } catch (err) {
+        console.error(err.message);
         process.exit(1);
     }
     console.log(`Collecting Electron ${electronVersion} prebuild (ABI ${targetAbi})`);
