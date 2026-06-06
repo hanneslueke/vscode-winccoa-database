@@ -18,6 +18,31 @@ let mcpClient: McpClient;
 let dbWatchedFiles: string[] = [];
 let refreshDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 
+function parseAbiMismatch(errorMsg: string): { builtAbi?: string; requiredAbi?: string } {
+    const builtMatch = errorMsg.match(/using\s+NODE_MODULE_VERSION\s+(\d+)/i);
+    const requiredMatch = errorMsg.match(/requires\s+NODE_MODULE_VERSION\s+(\d+)/i);
+    return {
+        builtAbi: builtMatch?.[1],
+        requiredAbi: requiredMatch?.[1],
+    };
+}
+
+function getBundledPrebuildAbis(): string[] {
+    const prebuildsDir = path.join(__dirname, 'prebuilds', `${process.platform}-${process.arch}`);
+    if (!fs.existsSync(prebuildsDir)) {
+        return [];
+    }
+
+    return fs
+        .readdirSync(prebuildsDir)
+        .map((name) => {
+            const match = name.match(/^better_sqlite3_(\d+)\.node$/);
+            return match ? match[1] : undefined;
+        })
+        .filter((abi): abi is string => Boolean(abi))
+        .sort((a, b) => Number(a) - Number(b));
+}
+
 function scheduleDebouncedRefresh(filename: string, curr: fs.Stats, prev: fs.Stats): void {
     log.info(
         `SQLite change detected — file: ${filename}, mtime: ${prev.mtime.toISOString()} → ${curr.mtime.toISOString()}, size: ${prev.size} → ${curr.size}`,
@@ -630,9 +655,41 @@ async function connectToProject(projectPath: string, version?: string): Promise<
     } catch (err) {
         const errorMsg = String(err);
         log.error(`Failed to open SQLite databases: ${errorMsg}`);
+        const hasAbiMismatch = errorMsg.includes('NODE_MODULE_VERSION');
 
-        // Check for platform mismatch error (native module compiled for wrong platform)
-        if (
+        if (hasAbiMismatch) {
+            const extensionId = 'winccoa-tools-pack.vscode-winccoa-database';
+            const hostAbi = process.versions.modules;
+            const { builtAbi, requiredAbi } = parseAbiMismatch(errorMsg);
+            const bundledAbis = getBundledPrebuildAbis();
+            const bundledText =
+                bundledAbis.length > 0
+                    ? bundledAbis.join(', ')
+                    : '(none found for this platform/arch)';
+
+            const abiMsg =
+                `Native module ABI mismatch detected.\n\n` +
+                `Extension host ABI (process.versions.modules): ${hostAbi}\n` +
+                `Required ABI from error: ${requiredAbi ?? 'unknown'}\n` +
+                `Loaded module ABI from error: ${builtAbi ?? 'unknown'}\n` +
+                `Bundled prebuild ABIs (${process.platform}-${process.arch}): ${bundledText}\n\n` +
+                `Fix options:\n` +
+                `1. Install a VSIX that includes ABI ${hostAbi} in prebuilds/${process.platform}-${process.arch}\n` +
+                `2. Rebuild in the extension folder with the deployed Node runtime:\n` +
+                `   npm install && npm run prebuilds\n\n` +
+                `Extension folder hint: ~/.vscode/extensions/${extensionId}-* or ~/.vscode-server/extensions/${extensionId}-*`;
+
+            vscode.window.showErrorMessage(abiMsg, 'Open README').then((selection) => {
+                if (selection === 'Open README') {
+                    vscode.env.openExternal(
+                        vscode.Uri.parse(
+                            'https://github.com/winccoa-tools-pack/vscode-winccoa-database#from-vsix',
+                        ),
+                    );
+                }
+            });
+            log.error(abiMsg);
+        } else if (
             errorMsg.includes('invalid ELF header') ||
             errorMsg.includes('not a valid Win32 application')
         ) {
